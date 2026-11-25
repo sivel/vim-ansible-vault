@@ -1,0 +1,137 @@
+*ansible-vault.txt*  Inline ansible-vault operations for YAML buffers
+
+Author:  sivel
+License: MIT
+
+==============================================================================
+CONTENTS                                              *ansible-vault-contents*
+
+    1. Introduction ......... |ansible-vault-intro|
+    2. Requirements ......... |ansible-vault-requirements|
+    3. Commands ............. |ansible-vault-commands|
+    4. Mappings ............. |ansible-vault-mappings|
+    5. Configuration ........ |ansible-vault-config|
+    6. How it works ......... |ansible-vault-internals|
+
+==============================================================================
+1. INTRODUCTION                                          *ansible-vault-intro*
+
+This plugin operates on inline Ansible Vault values (the `!vault` tag form)
+inside YAML files, shelling out to the `ansible-vault` CLI. It can encrypt a
+plain scalar in place, decrypt a vaulted value in place, preview a single
+value without modifying the buffer, and preview every vaulted value in the
+buffer as inline virtual text.
+
+Example of a vaulted value this plugin understands: >
+
+    api_token: !vault |
+      $ANSIBLE_VAULT;1.1;AES256
+      31346531363834336431343635343834333637663430613435...
+<
+==============================================================================
+2. REQUIREMENTS                                   *ansible-vault-requirements*
+
+- Vim 9.0 or newer.
+- `+textprop` feature for |:AnsibleVaultViewAll| inline display. The other
+  commands work without it.
+- The `ansible-vault` executable on $PATH (or set |g:ansible_vault_executable|).
+- A vault password source. By default the plugin runs ansible-vault from the
+  directory of the nearest `ansible.cfg`, so a configured
+  `vault_password_file` is honored. You may also set it explicitly with
+  |g:ansible_vault_password_file| or |g:ansible_vault_id|.
+
+==============================================================================
+3. COMMANDS                                           *ansible-vault-commands*
+
+                                                        *:AnsibleVaultEncrypt*
+:AnsibleVaultEncrypt    Encrypt the `key: value` scalar on the cursor line in
+                        place, replacing it with a `key: !vault |` block.
+
+                                                        *:AnsibleVaultDecrypt*
+:AnsibleVaultDecrypt    Decrypt the `!vault` block at the cursor in place,
+                        replacing it with a plain scalar. Multiline plaintext
+                        becomes a YAML block scalar (`key: |`).
+
+                                                           *:AnsibleVaultView*
+:AnsibleVaultView       Decrypt and display the single vaulted value at the
+                        cursor without modifying the buffer. Shown in a popup
+                        at the cursor, or the command line as a fallback.
+
+                                                        *:AnsibleVaultViewAll*
+:AnsibleVaultViewAll    Decrypt every vaulted value in the buffer and display
+                        each as inline virtual text after its header line,
+                        styled like a comment. Run again to toggle off.
+
+                                                          *:AnsibleVaultClear*
+:AnsibleVaultClear      Remove all inline previews added by
+                        |:AnsibleVaultViewAll|.
+
+==============================================================================
+4. MAPPINGS                                           *ansible-vault-mappings*
+
+No mappings are defined by default. Enable a set of buffer-local mappings for
+yaml filetypes with: >
+
+    let g:ansible_vault_default_mappings = 1
+<
+They use |<LocalLeader>|:
+
+    <LocalLeader>ave    :AnsibleVaultEncrypt
+    <LocalLeader>avd    :AnsibleVaultDecrypt
+    <LocalLeader>avv    :AnsibleVaultView
+    <LocalLeader>ava    :AnsibleVaultViewAll
+    <LocalLeader>avc    :AnsibleVaultClear
+
+Or define your own against the commands.
+
+==============================================================================
+5. CONFIGURATION                                        *ansible-vault-config*
+
+                                                  *g:ansible_vault_executable*
+Path to the ansible-vault binary. Default: "ansible-vault".
+
+                                             *g:ansible_vault_password_file*
+Passed as `--vault-password-file` to every invocation. Default: unset (rely
+on ansible.cfg discovery). Expanded, so "~/..." works.
+
+                                                      *g:ansible_vault_id*
+Passed as `--vault-id` to every invocation, e.g. "dev@prompt" or
+"prod@~/.vault_prod". Default: unset.
+
+                                                     *g:ansible_vault_cwd*
+Directory to run ansible-vault from. Default: the nearest ancestor of the
+current file containing `ansible.cfg`, falling back to the file's directory.
+Set this when your config lives elsewhere.
+
+                                             *g:ansible_vault_view_popup*
+When 1 (default), |:AnsibleVaultView| uses a cursor popup; when 0, it echoes
+to the command line.
+
+                                         *g:ansible_vault_view_highlight*
+Highlight group for inline previews. Default: "Comment".
+
+                                            *g:ansible_vault_view_prefix*
+Text prepended to each inline preview. Default: "  # ".
+
+                                            *g:ansible_vault_body_indent*
+Extra spaces of indentation for ciphertext/body lines relative to the key,
+used when encrypting and when emitting block scalars on decrypt. Default: 2.
+
+                                       *g:ansible_vault_default_mappings*
+When 1, enable the buffer-local mappings described in
+|ansible-vault-mappings|. Default: 0.
+
+==============================================================================
+6. HOW IT WORKS                                      *ansible-vault-internals*
+
+Vault blocks are found by scanning for a `key: !vault |` (or `>`) header and
+collecting the indented ciphertext lines beneath it. The ciphertext is
+dedented and piped to `ansible-vault decrypt` on stdin. Encryption pipes the
+scalar value to `ansible-vault encrypt_string --stdin-name <key>` and
+re-indents the result to match the original key.
+
+Commands run with the working directory set to the nearest `ansible.cfg` so
+config-based vault password resolution works. stdout is kept clean for the
+decrypted value; stderr (warnings, errors) is only surfaced on failure.
+
+ vim:tw=78:ts=8:ft=help:norl:
